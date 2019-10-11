@@ -25,21 +25,18 @@ class this_fiber;
 
 class fiber {
     friend this_fiber;
-
     enum STATUS { kReady, kRunning, kSuspend, kDead };
-
     using Task = std::function<void()>;
  public:
-
-    template< typename Fn, typename ... Args >
-    fiber(Fn &&, Args&& ...);
+    template<typename Fn, typename ... Args>
+    fiber(Fn&&, Args&& ...);
     
     ~fiber() = default;
 
     void join();
  
  private:
-    template< typename Fn, typename ... Args >
+    template<typename Fn, typename ... Args>
     static void running(Fn&&, Args&& ...);
     
     void clear();
@@ -49,10 +46,10 @@ class fiber {
     int        cid_;       //协程cid
     int        size_;      //栈使用了多少
     int        capacity_;  //栈总容量
-    std::shared_ptr<char[]> stack_; //协程栈
+    std::shared_ptr<char[]> stack_; //协程栈: 按需分配(只用于保存现场)
     STATUS     status_;    //协程状态
 
-    std::mutex stop_mutex;
+    std::mutex              stop_mutex;
     std::condition_variable stop_condvar;
 }; // class fiber
 
@@ -66,12 +63,11 @@ class this_fiber {
 
  private:
     static void save_stack(fibers::fiber* fb, const char* ebp);
-    static void switch_fiber(const int from_cid, const int to_cid);
+    static void switch_fiber(fibers::fiber* from_fb, fibers::fiber* to_fb);
     static void fifo();
 
  private:
-    static char stack_[kStackSize];
-    static ucontext_t context_;
+    static char shared_stack_[kStackSize]; //所有协程都在该栈上运行
     static int  number_;       //当前协程数量
     static int  max_number_;   //可开启协程上限
     static int  running_cid_;  //当前运行的协程cid
