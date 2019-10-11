@@ -9,6 +9,9 @@
 #include <array>
 #include <vector>
 #include <memory>
+#include <funtional>
+#include <mutex>
+#include <condition_variable>
 
 namespace co {
 
@@ -22,35 +25,53 @@ class this_fiber;
 
 class fiber {
     friend this_fiber;
-public:
-    template< typename Fn, typename ... Args >
-    fiber(Fn &&, Args&& ...);
+    enum STATUS { kReady, kRunning, kSuspend, kDead };
+    using Task = std::function<void()>;
+ public:
+    template<typename Fn, typename ... Args>
+    fiber(Fn&&, Args&& ...);
     
-    ~fiber();
+    ~fiber() = default;
 
-private:
+    void join();
+ 
+ private:
+    template<typename Fn, typename ... Args>
+    static void running(Fn&&, Args&& ...);
+    
+    void clear();
+
+ private:
     ucontext_t context_;   //上下文
     int        cid_;       //协程cid
     int        size_;      //栈使用了多少
     int        capacity_;  //栈总容量
-    std::shared_ptr<char[]> stack_; //协程栈
+    std::shared_ptr<char[]> stack_; //协程栈: 按需分配(只用于保存现场)
+    STATUS     status_;    //协程状态
+
+    std::mutex              stop_mutex;
+    std::condition_variable stop_condvar;
 }; // class fiber
 
 } // namespace fibers
 
 class this_fiber {
-    friend fiber;
+    friend fibers::fiber;
+
  public:
     static void yield();
-    static void resume(int cid);
 
  private:
-    static std::array<char, kStackSize> stack_;
-    static ucontext_t context_;
-    static int size_;       //当前协程数量
-    static int capacity_;   //可开启协程上限
-    static int running_cid_;//当前运行的协程cid
-    static std::vector<fiber> fiber_list_; //所有协程对象
+    static void save_stack(fibers::fiber* fb, const char* ebp);
+    static void switch_fiber(fibers::fiber* from_fb, fibers::fiber* to_fb);
+    static void fifo();
+
+ private:
+    static char shared_stack_[kStackSize]; //所有协程都在该栈上运行
+    static int  number_;       //当前协程数量
+    static int  max_number_;   //可开启协程上限
+    static int  running_cid_;  //当前运行的协程cid
+    static std::vector<fibers::fiber*> fiber_list_; //所有协程对象
 }; // class this_fiber
 
 } // namespace co
